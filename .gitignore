@@ -1,0 +1,35 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+!.vscode/settings.json
+
+# Keil uVision user/session files
+*.uvguix.*
+*.uvoptx
+*.bak
+*.dep
+
+# Build outputs
+*.o
+*.d
+*.axf
+*.crf
+*.elf
+*.hex
+*.htm
+*.map
+*.lnp
+*.iex
+*.bin
+*.lib
+*.lst
+*.sbr
+
+# Keil generated folders/logs
+MDK-ARM/EnvironMon/
+MDK-ARM/.vscode/
+*.log
+*.log.lock
