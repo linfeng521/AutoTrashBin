@@ -341,7 +341,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F103xB</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../UserLib/Oled</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../UserLib/Oled;..\UserLib\Basic</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -636,6 +636,16 @@
               <FileName>ssd1306.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\UserLib\Oled\ssd1306.c</FilePath>
+            </File>
+            <File>
+              <FileName>kalman_1d_filter.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\UserLib\Basic\kalman_1d_filter.c</FilePath>
+            </File>
+            <File>
+              <FileName>kalman_1d_filter.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\UserLib\Basic\kalman_1d_filter.h</FilePath>
             </File>
           </Files>
         </Group>

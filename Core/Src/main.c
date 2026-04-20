@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "ssd1306.h"
+#include "kalman_1d_filter.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -126,7 +127,9 @@ int main(void)
   HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_2);
   uint8_t degree = 0;
   int8_t dir = 5;
-  char message[20] = "";
+  char message[36] = "";
+  // 加入卡尔曼滤波
+  float distance_filtered = 0.0;
   const uint8_t title[] = {4, 5, 6, 7, 8}; // "智能垃圾桶"
   const uint8_t open[] = {0, 1};           // "打开"
   const uint8_t close[] = {2, 3};          // "关闭"
@@ -142,7 +145,7 @@ int main(void)
   while (1)
   {
     HAL_GPIO_TogglePin(Led_GPIO_Port, Led_Pin);
-    HAL_Delay(100);
+    //HAL_Delay(100);
     // set_degree(degree);
     // degree += dir;
     // if (degree >= 180)
@@ -155,9 +158,9 @@ int main(void)
     HAL_Delay(1); // 延时了1ms
     HAL_GPIO_WritePin(Trig_GPIO_Port, Trig_Pin, GPIO_PIN_RESET);
     __HAL_TIM_SET_COUNTER(&htim2, 0);
-    HAL_Delay(200);
-
-    sprintf(message, "dis:%fcm\r\n", distance);
+    HAL_Delay(50);
+    distance_filtered = klm(distance);
+    sprintf(message, "dis:%f,%f\r\n", distance, distance_filtered);
     sprintf(buf, "dis:%3.1fcm", distance);
     OLED_ShowString(0, 2, buf, 16, 0);
     HAL_UART_Transmit(&huart1, (uint8_t *)message, strlen(message), 200);
@@ -167,8 +170,8 @@ int main(void)
       // x,y,state,num,array
       OLED_ShowCHinese_Array(40, 6, 1, 2, open); // 从第20列开始显示
       set_degree(90);
-      sprintf(message, "distance low\r\n");
-      HAL_UART_Transmit(&huart1, (uint8_t *)message, strlen(message), 200);
+      //sprintf(message, "distance low\r\n");
+      // HAL_UART_Transmit(&huart1, (uint8_t *)message, strlen(message), 200);
     }
     else
     {
@@ -176,8 +179,8 @@ int main(void)
       OLED_ShowCHinese_Array(40, 6, 1, 2, close);
       // OLED_ShowCHinese(56 - 16, 6, 2, 1);
       // OLED_ShowCHinese(56, 6, 3, 1);
-      sprintf(message, "distance high\r\n");
-      HAL_UART_Transmit(&huart1, (uint8_t *)message, strlen(message), 200);
+      //sprintf(message, "distance high\r\n");
+      // HAL_UART_Transmit(&huart1, (uint8_t *)message, strlen(message), 200);
       set_degree(0);
     }
     // x,y,index,0/1

@@ -13,6 +13,7 @@ OLED 显示屏：SCL SDA引脚
 定时器PWM输出
 定时器输入捕获、捕获中断处理
 OLED 显示汉字
+一维卡尔曼滤波
 ## 二、项目功能
 1. 自动感应开盖
 通过超声波模块检测垃圾桶前方目标距离，当有人靠近时自动打开桶盖。
@@ -73,7 +74,31 @@ i2c SCL SDA引脚  STM32F103C8T6  外部电源
 包括桶盖、舵机连接结构和安装支架，用于实现实际开盖动作。
 
 ### 项目实拍
-![alt text](image.png)
+![alt text](imgs/项目实拍.png)
+[一维卡尔门滤波](UserLib/Basic/kalman_1d_filter.c)
+```c
+// 卡尔曼参数
+static float xk = 0.0f; // 上一时刻最优估计值
+static float Q = 0.01f; // 过程噪声
+static float R = 0.2f;	// 测量噪声
+static float Pk = 1.0f; // 上一时刻误差协方差
+
+float klm(float zk)
+{
+
+	// 预测阶段
+	float xk_ = xk;		// 预测状态,无速度，直接等于上一时刻值
+	float Pk_ = Pk + Q; // 预测误差协方差
+	// 更新阶段
+	float Kk = Pk_ / (Pk_ + R); // 卡尔曼增益
+	xk = xk_ + Kk * (zk - xk_); // 更新最优估计值
+	Pk = (1.0f - Kk) * Pk_;		// 更新误差协方差
+
+	return xk;
+}
+
+```
+![alt text](imgs/vofa+上位机截图.png)
 ## 四、项目扩展部分
 1. 垃圾满载检测
 增加一个检测模块，用于判断桶内垃圾是否已满，并在 OLED 上提示。
