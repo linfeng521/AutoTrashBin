@@ -1,4 +1,21 @@
-# 练习项目一、1.1智能垃圾桶
+# 练习项目一、1.1智能垃圾桶(FreeRTOS版)
+
+## 更新日志
+
+### 阶段二：FreeRTOS 多任务实现 (2026-05)
+- 引入 FreeRTOS，拆分为三个任务：超声波测距、舵机控制、OLED 显示
+- 任务优先级：超声波/舵机/OLED 均为 Normal
+- 控制逻辑：距离 < 10cm 开盖，保持 2 秒后关盖
+- 卡尔曼滤波用于控制和显示，平滑数据
+- 封装HCSR04 超声波模块/Servo 模块封装
+- 更新OLED库，支持汉字显示
+
+### 阶段一：裸机实现
+- 基础功能：超声波测距 + 舵机控制 + OLED 显示
+- 卡尔曼滤波降噪
+
+---
+
 ## 一、项目思路
 智能垃圾桶的整体思路是：通过超声波模块检测人体或物体是否靠近垃圾桶，当距离小于设定值时，主控芯片输出控制信号驱动舵机转动，从而带动桶盖自动打开；在垃圾投放完成后，延时一段时间再自动关闭桶盖。
 同时，OLED 显示屏用于显示系统当前状态，例如“有人靠近”“桶盖打开”“桶盖关闭”“距离信息”等，让整个系统更加直观、智能。
@@ -10,10 +27,27 @@ OLED 显示屏：SCL SDA引脚
 主控芯片：Stm32f103
 
 ### 技术要点
-定时器PWM输出
-定时器输入捕获、捕获中断处理
-OLED 显示汉字
-一维卡尔曼滤波
+- 定时器PWM输出
+- 定时器输入捕获、捕获中断处理
+- OLED 显示汉字
+- 一维卡尔曼滤波
+- FreeRTOS 多任务调度
+- 任务间通信（共享变量）
+
+### 任务拆解（FreeRTOS 版本）
+**1. 超声波测距任务 (ultrasonicTask, 优先级: Normal)**
+  - 周期: 160ms (触发 + 60ms等待 + 100ms延时)
+  - 流程: 触发测距 → 等待回波 → 读取距离 → 卡尔曼滤波 → 更新共享变量
+  - 控制逻辑: 距离 < 10cm 开盖，保持 2 秒后关盖
+
+**2. 舵机控制任务 (servoTask, 优先级: Normal)**
+  - 初始化舵机到关闭位置 (0度)
+  - 当前由超声波任务直接控制，后续可改为队列通信
+
+**3. OLED 显示任务 (oledDSTask, 优先级: Normal)**
+  - 周期: 100ms
+  - 显示: 标题、距离、状态（开盖/关闭）
+  - 读取共享变量 `g_distance_filtered` 和 `g_lid_state`
 ## 二、项目功能
 1. 自动感应开盖
 通过超声波模块检测垃圾桶前方目标距离，当有人靠近时自动打开桶盖。
@@ -29,44 +63,29 @@ OLED 实时显示垃圾桶当前工作状态，如待机、开盖、关盖、检
 
 2. 超声波模块
 用于测量垃圾桶前方目标距离，判断是否有人靠近。
+
+**FreeRTOS 版本改进：**
+- 增加数据有效性标志 `data_ready`
+- `HCSR04_GetDistance()` 返回 -1 表示数据无效
+- 任务中只处理有效数据，避免读取旧值
+
 ![alt text](imgs/超声波模块时序原理图.png)
 ![alt text](imgs/超声波模块cubemx配置.png)
-```c
-uint32_t upEdge = 0;   // 上升沿捕获的时间（us）
-uint32_t downEdge = 0; // 下降沿捕获的时间（us）
-float distance = 0.0;
-//开启了tim2全局中断，定时器中断回调函数
-void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
-{
-  if (htim->Instance == TIM2 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2)
-  {
-
-    upEdge = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
-    downEdge = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
-    distance = (float)((downEdge - upEdge) * 0.034 / 2);
-  }
-}
-```
 3. 舵机模块
 用于驱动垃圾桶盖完成打开和关闭动作。
-SG90舵机           STM32F103C8T6        外部电源
 
-棕色线（GND）  →    GND引脚            →  GND
-红色线（VCC）  →    连外部5V             →  5V
-橙色线（信号）   →    PA8（TIM1_CH1）
+**接线:**
+- 棕色线（GND）  →  GND
+- 红色线（VCC）  →  外部5V
+- 橙色线（信号） →  PA8（TIM1_CH1）
+
 ![alt text](imgs/舵机PWM输出.png)
-```c
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-  while (1)
-  {
-    __HAL_TIM_SetCompare(&htim1, TIM_CHANNEL_1, duration);
-    HAL_Delay(100);
-  }
-```
 4. OLED 显示屏
 用于显示系统运行状态、距离信息和提示内容。
-i2c SCL SDA引脚  STM32F103C8T6  外部电源
-- 驱动增加了汉字显示功能
+
+**接线:** I2C (SCL, SDA)
+**显示内容:** 标题、距离、状态（开盖/关闭）
+**刷新周期:** 100ms
 
 5. 电源模块
 为主控、超声波、舵机和 OLED 提供稳定供电。
