@@ -10,6 +10,10 @@
 - 封装HCSR04 超声波模块/Servo 模块封装
 - 更新OLED库，支持汉字显示
 
+![alt text](imgs/阶段二FreeRTOS倒计时版本.jpg)
+
+[阶段二FreeRTOS视频](imgs/阶段二FreeRTOS倒计时版本.mp4)
+
 ### 阶段一：裸机实现
 - 基础功能：超声波测距 + 舵机控制 + OLED 显示
 - 卡尔曼滤波降噪

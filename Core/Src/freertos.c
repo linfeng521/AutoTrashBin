@@ -53,6 +53,7 @@
 // 共享变量：用于任务间通信
 volatile float g_distance_filtered = 0.0;
 volatile uint8_t g_lid_state = 0; // 0=关闭, 1=打开
+volatile uint32_t g_lid_open_time = 0; // 开盖时间戳
 /* USER CODE END Variables */
 /* Definitions for servoTask */
 osThreadId_t servoTaskHandle;
@@ -143,14 +144,14 @@ void MX_FREERTOS_Init(void)
 void StartServoTask(void *argument)
 {
   /* USER CODE BEGIN StartServoTask */
-  // PWM 已在 main.c 中启动，这里只需初始化舵机位置
+  // PWM 已在 main.c 中启动，初始化舵机位置
   set_degree(0);
 
   /* Infinite loop */
   for (;;)
   {
-    // 舵机任务暂时空闲，由超声波任务直接控制
-    // 后续可以改为队列接收命令的方式
+    // 舵机任务暂时空闲，当前由超声波任务直接控制
+    // TODO: uart命令/按键中断队列
     osDelay(1000);
   }
   /* USER CODE END StartServoTask */
@@ -168,7 +169,6 @@ void StartUltrasonicTask(void *argument)
   /* USER CODE BEGIN StartUltrasonicTask */
   float distance_raw = 0.0;
   float distance_filtered = 0.0;
-  static uint32_t lidOpenTime = 0;
   static uint8_t lidIsOpen = 0;
 
   // 定时器输入捕获已在 main.c 中启动
@@ -182,7 +182,7 @@ void StartUltrasonicTask(void *argument)
     // 2. 等待测距完成（超声波最大测距时间约 38ms）
     osDelay(60);
 
-    // 3. 获取原始距离（带有效性检查）
+    // 3. 获取原始距离
     distance_raw = HCSR04_GetDistance();
 
     // 4. 只有数据有效时才处理
@@ -193,30 +193,30 @@ void StartUltrasonicTask(void *argument)
       // 更新共享变量（OLED 显示滤波值）
       g_distance_filtered = distance_filtered;
 
-      // 5. 控制逻辑（if-else 版本，使用滤波后的值，更稳定）
-      if (distance_filtered < 10.0 && !lidIsOpen)
+      // 5. 控制逻辑 小于5cm
+      if (distance_filtered < 5.0 && !lidIsOpen)
       {
         // 检测到人靠近，开盖
         set_degree(90);
         lidIsOpen = 1;
         g_lid_state = 1;
-        lidOpenTime = osKernelGetTickCount();
+        g_lid_open_time = osKernelGetTickCount();
       }
-      else if (lidIsOpen && (osKernelGetTickCount() - lidOpenTime > 2000))
+      else if (lidIsOpen && (osKernelGetTickCount() - g_lid_open_time > 3000))
       {
-        // 保持 2 秒后关盖
+        // 保持 3 秒后关盖
         set_degree(0);
         lidIsOpen = 0;
         g_lid_state = 0;
       }
-      else if (lidIsOpen && distance_filtered < 30.0)
+			//fix: 修复上一版人离开后不能关盖的bug
+      else if (lidIsOpen && distance_filtered < 5.0)
       {
         // 如果开盖期间又检测到人，重置计时
-        lidOpenTime = osKernelGetTickCount();
+        g_lid_open_time = osKernelGetTickCount();
       }
     }
-
-    // 6. 延时 100ms 后继续下一次测距（改回 100ms，避免测距冲突）
+    // 6. 延时 100ms 后继续下一次测距
     osDelay(100);
   }
   /* USER CODE END StartUltrasonicTask */
@@ -235,11 +235,11 @@ void StartOledTask(void *argument)
   char buf[30];
   float distance_copy = 0.0;
   uint8_t lid_state_copy = 0;
-  // 使用 UTF-8 字节数组定义中文字符串（兼容 Keil）
+  // 使用 UTF-8 字节数组定义中文字符串（不知道为啥中文编译Error，这里改为编码）
   const char title[] = "\xE6\x99\xBA\xE8\x83\xBD\xE5\x9E\x83\xE5\x9C\xBE\xE6\xA1\xB6RTOS"; // "智能垃圾桶"
   const char state_open[] = "\xE7\x8A\xB6\xE6\x80\x81:\xE5\xBC\x80\xE7\x9B\x96"; // "状态:开盖"
   const char state_close[] = "\xE7\x8A\xB6\xE6\x80\x81:\xE5\x85\xB3\xE9\x97\xAD"; // "状态:关闭"
-
+	const char * message = "\xE7\xA7\x92\xE5\x90\x8E\xE5\x85\xB3\xE9\x97\xAD\xE7\x9B\x96"; //秒后关闭盖
   osDelay(20);
   OLED_Init();
 
@@ -257,15 +257,20 @@ void StartOledTask(void *argument)
 
     // 第2行：距离信息
     sprintf(buf, "Dis:%.1fcm", distance_copy);
-    OLED_PrintASCIIString(0, 20, buf, &afont16x8, OLED_COLOR_NORMAL);
+    OLED_PrintASCIIString(0, 16, buf, &afont16x8, OLED_COLOR_NORMAL);
 
     // 第3行：状态信息
     if (lid_state_copy == 1) {
-      OLED_PrintString(0, 40, (char*)state_open, &font16x16, OLED_COLOR_NORMAL);
+      OLED_PrintString(0, 32, (char*)state_open, &font16x16, OLED_COLOR_NORMAL);
+			// 第4行：显示还有*秒后关闭
+			uint32_t elapsed = (osKernelGetTickCount() - g_lid_open_time) / 1000;
+			uint8_t remain = (elapsed < 3) ? (3 - elapsed) : 0;
+			sprintf(buf, "%d%s", remain, message);
+			OLED_PrintString(0, 48, buf, &font16x16, OLED_COLOR_NORMAL);
     } else {
-      OLED_PrintString(0, 40, (char*)state_close, &font16x16, OLED_COLOR_NORMAL);
+      OLED_PrintString(0, 32, (char*)state_close, &font16x16, OLED_COLOR_NORMAL);
     }
-
+		
     OLED_ShowFrame();
 
     osDelay(100);  // 100ms 刷新一次，更快响应
